@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 )
 
 type problem struct {
@@ -15,7 +16,11 @@ type problem struct {
 
 func main() {
 	csvFilename := flag.String("csv", "problems.csv", "a csv file in the format of 'question,answer'")
+	timeLimit := flag.Int("limit", 30, "the time limit for the quiz in seconds")
+
 	flag.Parse()
+
+	timer := time.NewTimer(time.Duration(*timeLimit) * time.Second)
 
 	csvFile, err := os.Open(*csvFilename)
 	if err != nil {
@@ -30,24 +35,31 @@ func main() {
 
 	questions := fillQuiz(csvLines)
 
-	readQuestions(questions)
+	readQuestions(questions, *timer)
 }
 
-func readQuestions(questions []problem) {
+func readQuestions(questions []problem, timer time.Timer) {
 	correct := 0
-	index := 1
-	for _, v := range questions {
-		var ans string
-		fmt.Printf("#%d - Qual a resposta para: %s ?", index, v.q)
-		fmt.Scanf("%s", &ans)
-		if ans != v.a {
-			fmt.Println("Que pena, você errou!")
-			break
-		} else {
-			fmt.Println("Parabéns, resposta correta.")
-			correct++
+
+	for i, v := range questions {
+		fmt.Printf("#%d - Qual a resposta para: %s ?\n", i+1, v.q)
+		answerCh := make(chan string)
+		go func() {
+			var ans string
+			fmt.Scanf("%s", &ans)
+			answerCh <- ans
+		}()
+
+		select {
+		case <-timer.C:
+			fmt.Printf("\nVocê acertou %d de %d.\n", correct, len(questions))
+			return
+		case ans := <-answerCh:
+			if ans == v.a {
+				correct++
+			}
 		}
-		index++
+
 	}
 	fmt.Printf("Você acertou %d de %d.\n", correct, len(questions))
 }
